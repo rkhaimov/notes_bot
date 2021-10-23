@@ -1,38 +1,78 @@
-import fs from 'fs';
-import { TextEntry, IStorage, PhotoEntry, LocationEntry } from './contracts';
+import { IStorage, LocationEntry, PhotoEntry, TextEntry } from './contracts';
+import meta from './meta.json';
+import fetch, { Response } from 'superagent';
+import assert from 'assert';
+import * as Stream from 'stream';
+import admin, { firestore } from 'firebase-admin';
+import fb from './fb.json';
+import { getFirestore } from 'firebase-admin/firestore';
+import { ServiceAccount } from 'firebase-admin/lib/app/credential';
+import CollectionReference = firestore.CollectionReference;
 
-if (fs.existsSync('./store.json') === false) {
-  fs.writeFileSync('./store.json', '[]');
+export async function createStorage(): Promise<IStorage> {
+  await request('get', '?path=app:/photos/').catch((error: Response) => {
+    assert(error.status === 404);
+
+    return request('put', '?path=app:/photos/');
+  });
+
+  return {
+    addTextEntry: (entry) => addEntryToStore(entry),
+    addPhotoEntry: async (entry, photo) => {
+      await uploadPhoto(`${entry.photo}.png`, photo);
+
+      return addEntryToStore({ ...entry, photo: `${entry.photo}.png` });
+    },
+    addLocationEntry: (entry) => addEntryToStore(entry),
+  };
 }
 
-if (fs.existsSync('./photos') === false) {
-  fs.mkdirSync('./photos');
+const firebase = admin.initializeApp({
+  credential: admin.credential.cert(fb as unknown as ServiceAccount),
+});
+
+function addEntryToStore(entry: Entry) {
+  const store = getFirestore(firebase);
+
+  const collection = store.collection('entries') as CollectionReference<{
+    date: number;
+    additional: string;
+  }>;
+
+  const { date, ...additional } = entry;
+
+  return collection.add({
+    date: entry.date,
+    additional: JSON.stringify(additional),
+  });
 }
 
-export const storage: IStorage = {
-  addTextEntry: async (entry) => {
-    const store: Store = JSON.parse(fs.readFileSync('./store.json').toString());
+type Entry = TextEntry | PhotoEntry | LocationEntry;
 
-    store.push(entry);
+function request(method: 'get' | 'put' | 'post' | 'delete', url: string) {
+  return fetch[method](
+    `https://cloud-api.yandex.net/v1/disk/resources${url}`,
+  ).set('Authorization', `OAuth ${meta.disk}`);
+}
 
-    fs.writeFileSync('./store.json', JSON.stringify(store));
-  },
-  addPhotoEntry: async (entry, photo) => {
-    photo.pipe(fs.createWriteStream(`./photos/${entry.photo}.png`));
+function uploadPhoto(name: string, photo: Stream.Readable) {
+  return request('get', `/upload?path=app:/photos/${name}`).then(
+    async (response) => {
+      assert(typeof response.body.href === 'string');
 
-    const store: Store = JSON.parse(fs.readFileSync('./store.json').toString());
+      return fetch
+        .put(response.body.href)
+        .set('Content-Type', 'application/octet-stream')
+        .send(await toBuffer());
+    },
+  );
 
-    store.push(entry);
+  function toBuffer() {
+    return new Promise<Buffer>((resolve) => {
+      const data: any[] = [];
 
-    fs.writeFileSync('./store.json', JSON.stringify(store));
-  },
-  addLocationEntry: async (entry) => {
-    const store: Store = JSON.parse(fs.readFileSync('./store.json').toString());
-
-    store.push(entry);
-
-    fs.writeFileSync('./store.json', JSON.stringify(store));
-  },
-};
-
-type Store = Array<TextEntry | PhotoEntry | LocationEntry>;
+      photo.on('data', (chunk) => data.push(chunk));
+      photo.on('end', () => resolve(Buffer.concat(data)));
+    });
+  }
+}
