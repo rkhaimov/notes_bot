@@ -1,10 +1,9 @@
+import meta from './meta.json';
 import Bot from 'node-telegram-bot-api';
 import { storage } from './storage';
 import assert from 'assert';
 
-assert(process.env.TOKEN !== undefined);
-
-const bot = new Bot(process.env.TOKEN, { polling: true });
+const bot = new Bot(meta.token, { polling: true });
 
 bot.on('text', async (msg) => {
   assert(typeof msg.text === 'string');
