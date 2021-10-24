@@ -14,7 +14,7 @@ async function main() {
 
     await storage.addTextEntry({ date: msg.date, text: msg.text });
 
-    return bot.sendMessage(msg.chat.id, 'Saved');
+    return bot.sendMessage(msg.chat.id, 'Done');
   });
 
   bot.on('photo', async (msg) => {
@@ -29,7 +29,7 @@ async function main() {
       bot.getFileStream(best.file_id),
     );
 
-    return bot.sendMessage(msg.chat.id, 'Saved');
+    return bot.sendMessage(msg.chat.id, 'Done');
   });
 
   bot.on('location', async (msg) => {
@@ -41,6 +41,6 @@ async function main() {
       longitude: msg.location.longitude,
     });
 
-    return bot.sendMessage(msg.chat.id, 'Saved');
+    return bot.sendMessage(msg.chat.id, 'Done');
   });
 }
