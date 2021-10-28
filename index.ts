@@ -44,3 +44,5 @@ async function main() {
     return bot.sendMessage(msg.chat.id, 'Done');
   });
 }
+
+setTimeout(() => process.exit(), 60_000);
